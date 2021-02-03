@@ -1,37 +1,95 @@
 package main
 
 import (
-	"encoding/json"
-	"io/ioutil"
-	"log"
-	"net/http"
+	"database/sql"
+	"fmt"
 
-	"github.com/gin-gonic/gin"
+	_ "github.com/lib/pq"
 )
 
-type User struct {
-	ID      int    `json:"id"`
-	Name    string `json:"name"`
-	Avatar  string `json:"avatar"`
-	Country string `json:"country"`
+type Post struct {
+	ID      int
+	Content string
+	Author  string
 }
 
-func users(context *gin.Context) {
-	bytes, err := ioutil.ReadFile("./data/users.json")
+var DB *sql.DB
+
+func init() {
+	var err error
+	DB, err = sql.Open("postgres", "host=sandbox-gin-db user=gwp dbname=gwp password=gwp sslmode=disable")
 	if err != nil {
-		log.Fatal(err)
+		panic(err)
+	}
+}
+
+func Posts(limit int) (posts []Post, err error) {
+	rows, err := DB.Query("select id, content,author from posts limit $1", limit)
+	if err != nil {
+		return
 	}
 
-	var users []User
-	if err := json.Unmarshal(bytes, &users); err != nil {
-		log.Fatal(err)
+	for rows.Next() {
+		post := Post{}
+		err = rows.Scan(&post.ID, &post.Content, &post.Author)
+		if err != nil {
+			return
+		}
+		posts = append(posts, post)
 	}
-	context.JSON(http.StatusOK, users)
+
+	rows.Close()
+	return
+}
+
+func GetPost(id int) (post Post, err error) {
+	post = Post{}
+	err = DB.QueryRow("select id, content, author from posts where id = $1", id).Scan(&post.ID, &post.Content, &post.Author)
+	return
+}
+
+func (post *Post) Create() (err error) {
+	// prepared statement SQLステートメントのテンプレート $に値をはめて実行できる
+	statement := "insert into posts (content, author) values ($1,$2) returning id"
+	stmt, err := DB.Prepare(statement)
+	if err != nil {
+		return
+	}
+	defer stmt.Close()
+
+	// Scanに渡した値にreturningの値を入れる
+	// Query rowは最初の一件のrowだけ
+	err = stmt.QueryRow(post.Content, post.Author).Scan(&post.ID)
+
+	return
+}
+
+func (post *Post) Update() (err error) {
+	_, err = DB.Exec("update posts set content = $2, author = $3 where id = $1", post.ID, post.Content, post.Author)
+	return
+}
+
+func (post *Post) Delete() (err error) {
+	_, err = DB.Exec("delete from posts where id = $1", post.ID)
+	return
 }
 
 func main() {
-	route := gin.Default()
+	post := Post{Content: "Hello World!", Author: "tyankatsu"}
 
-	route.GET("/users", users)
-	route.Run()
+	fmt.Println(post)
+	post.Create()
+	fmt.Println(post)
+
+	readPost, _ := GetPost(post.ID)
+	fmt.Println(readPost)
+
+	readPost.Content = "Bonjour Monde!"
+	readPost.Author = "Pierre"
+	readPost.Update()
+
+	posts, _ := Posts(10)
+	fmt.Println(posts)
+
+	readPost.Delete()
 }
