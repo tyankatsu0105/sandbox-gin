@@ -5,6 +5,7 @@ services:
     tty: true
     build:
       context: .
+      dockerfile: Dockerfile.dev
       args:
         APP_NAME: $APP_NAME
         WORKDIR: $WORKDIR
