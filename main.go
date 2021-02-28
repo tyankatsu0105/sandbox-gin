@@ -11,28 +11,32 @@ import (
 // User ...
 type User struct {
 	gorm.Model
-	Name string
-	Age int
+	Name string `gorm:"default:defaultName"`
+	Age int `gorm:"default:20"`
 	Birthday time.Time
 }
 
-var db *gorm.DB
-var err error
 
-func init() {
+
+func gormConnect() *gorm.DB {
 	dsn := "host=sandbox-gin-db user=gorm dbname=gorm password=gorm sslmode=disable"
-	db, err = gorm.Open(postgres.Open(dsn), &gorm.Config{})
+	db, err := gorm.Open(postgres.Open(dsn), &gorm.Config{})
 
 	if err != nil {
-		panic(err)
+		panic(err.Error())
 	}
+
+	return db
 }
 
+
 func main()  {
-	db.AutoMigrate(&User{})
-	user1 := User{Name: "taro1", Age: 18, Birthday: time.Now()}
+	users := []User{}
+	db := gormConnect()
 
-	db.Create(&user1)
-	fmt.Println(user1.Name)
+	db.Find(&users)
 
+	for _, user := range users {
+		fmt.Println(user.Name)
+	}
 }
